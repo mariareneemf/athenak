@@ -1328,8 +1328,8 @@ void TDEFluxes(HistoryData *pdata, Mesh *pm) {
 //! \fn void RefinementCondition()
 //! Implements custom AMR refinement condition
 void RefinementCondition(MeshBlockPack* pmbp) {
-  auto &refine_flag = pmbp->pmesh->pmr->refine_flag;
-  int nmb = pmbp->nmb_thispack;
+  //auto &refine_flag = pmbp->pmesh->pmr->refine_flag;
+  /*int nmb = pmbp->nmb_thispack;
   int mbs = pmbp->pmesh->gids_eachrank[global_variable::my_rank];
 
   par_for_outer("UserProblem_AMR::REFCOND", DevExeSpace(), 0, 0, 0, (nmb - 1),
@@ -1340,7 +1340,8 @@ void RefinementCondition(MeshBlockPack* pmbp) {
 
   // sync host and device
   refine_flag.template modify<DevExeSpace>();
-  refine_flag.template sync<HostMemSpace>();
+  refine_flag.template sync<HostMemSpace>();*/
+  return;
 }
 
 namespace{
