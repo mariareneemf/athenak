@@ -59,6 +59,11 @@ struct tde_pgen{
   Real h_stream; //scale height
   int inj_cell_debug; //flag to bookkeep injection cells
 
+  //user amr condition
+  Real amr_maxdens, amr_mindens;
+  Real amr_maxd2, amr_mind2;
+  Real amr_zmax;
+
   Real hst_radii_1, hst_radii_2;
 
   //opacity table
@@ -149,6 +154,14 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   tde.r_inj_thresh_coarse = pin->GetReal("problem", "r_inj_thresh_coarse");
   tde.hst_radii_1 = pin->GetOrAddReal("problem", "hst_radii_1", 100.0);
   tde.hst_radii_2 = pin->GetOrAddReal("problem", "hst_radii_2", 80.0);
+  //user amr condition
+  if (pmy_mesh_->adaptive) {
+    tde.amr_maxdens = pin->GetReal("problem", "amr_maxdens");
+    tde.amr_mindens = pin->GetReal("problem", "amr_mindens");
+    tde.amr_maxd2   = pin->GetReal("problem", "amr_maxd2");
+    tde.amr_mind2   = pin->GetReal("problem", "amr_mind2");
+    tde.amr_zmax    = pin->GetReal("problem", "amr_zmax");
+  }
   //stream structure
   tde.uniform_stream = pin->GetOrAddInteger("problem", "uniform_stream", 1);
   tde.h_stream = pin->GetOrAddReal("problem", "h_stream", 0.01);
@@ -1328,19 +1341,70 @@ void TDEFluxes(HistoryData *pdata, Mesh *pm) {
 //! \fn void RefinementCondition()
 //! Implements custom AMR refinement condition
 void RefinementCondition(MeshBlockPack* pmbp) {
-  //auto &refine_flag = pmbp->pmesh->pmr->refine_flag;
-  /*int nmb = pmbp->nmb_thispack;
+  auto &refine_flag = pmbp->pmesh->pmr->refine_flag;
+  int nmb = pmbp->nmb_thispack;
   int mbs = pmbp->pmesh->gids_eachrank[global_variable::my_rank];
+
+  // capture variables for kernels
+  auto &indcs = pmbp->pmesh->mb_indcs;
+  int &is = indcs.is, nx1 = indcs.nx1;
+  int &js = indcs.js, nx2 = indcs.nx2;
+  int &ks = indcs.ks, nx3 = indcs.nx3;
+  const int nkji = nx3*nx2*nx1;
+  const int nji  = nx2*nx1;
+  auto &multi_d = pmbp->pmesh->multi_d;
+  auto &three_d = pmbp->pmesh->three_d;
+  auto &size = pmbp->pmb->mb_size;
+  auto &w0 = pmbp->phydro->w0;
+
+  Real maxdens = tde.amr_maxdens;
+  Real mindens = tde.amr_mindens;
+  Real maxd2 = tde.amr_maxd2;
+  Real mind2 = tde.amr_mind2;
+  Real zmax = tde.amr_zmax;
 
   par_for_outer("UserProblem_AMR::REFCOND", DevExeSpace(), 0, 0, 0, (nmb - 1),
   KOKKOS_LAMBDA(TeamMember_t tmember, const int m) {
-    //Placeholder (does nothing for now)
-    refine_flag.d_view(m + mbs) = 0;
+    //max rest-frame density in this meshblock
+    Real team_dmax = 0.0;
+    Kokkos::parallel_reduce(Kokkos::TeamThreadRange(tmember, nkji),
+    [=](const int idx, Real& dmax) {
+      int k = (idx)/nji;
+      int j = (idx - k*nji)/nx1;
+      int i = (idx - k*nji - j*nx1) + is;
+      j += js;
+      k += ks;
+      dmax = fmax(w0(m,IDN,k,j,i), dmax);
+    },Kokkos::Max<Real>(team_dmax));
+
+    //max normalized second derivative of density in this meshblock
+    Real team_d2max = 0.0;
+    Kokkos::parallel_reduce(Kokkos::TeamThreadRange(tmember, nkji),
+    [=](const int idx, Real& d2max) {
+      int k = (idx)/nji;
+      int j = (idx - k*nji)/nx1;
+      int i = (idx - k*nji - j*nx1) + is;
+      j += js;
+      k += ks;
+      Real d = w0(m,IDN,k,j,i);
+      Real d2 = fabs(w0(m,IDN,k,j,i+1) - 2.0*d + w0(m,IDN,k,j,i-1));
+      if (multi_d) {d2 += fabs(w0(m,IDN,k,j+1,i) - 2.0*d + w0(m,IDN,k,j-1,i));}
+      if (three_d) {d2 += fabs(w0(m,IDN,k+1,j,i) - 2.0*d + w0(m,IDN,k-1,j,i));}
+      d2max = fmax((d2/d), d2max);
+    },Kokkos::Max<Real>(team_d2max));
+
+    //largest |z| spanned by this meshblock
+    Real zblk = fmax(fabs(size.d_view(m).x3min), fabs(size.d_view(m).x3max));
+
+    //only derefine when flag has not been set by other criteria
+    int &flag = refine_flag.d_view(m+mbs);
+    if ((team_dmax > maxdens) && (team_d2max > maxd2) && (zblk < zmax)) {flag = 1;}
+    if ((team_dmax < mindens) && (team_d2max < mind2) && (flag == 0)) {flag = -1;}
   });
 
-  // sync host and device
+  // sync device array with host
   refine_flag.template modify<DevExeSpace>();
-  refine_flag.template sync<HostMemSpace>();*/
+  refine_flag.template sync<HostMemSpace>();
   return;
 }
 
