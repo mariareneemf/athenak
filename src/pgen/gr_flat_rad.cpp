@@ -1398,7 +1398,9 @@ void RefinementCondition(MeshBlockPack* pmbp) {
 
     //only derefine when flag has not been set by other criteria
     int &flag = refine_flag.d_view(m+mbs);
-    if ((team_dmax > maxdens) && (team_d2max > maxd2) && (zblk < zmax)) {flag = 1;}
+    bool ref_dens = (team_dmax > maxdens);
+    bool ref_d2 = ((team_d2max > maxd2) && (team_dmax > 2.0*mindens));
+    if ((ref_dens || ref_d2) && (zblk < zmax)) {flag = 1;}
     if ((team_dmax < mindens) && (team_d2max < mind2) && (flag == 0)) {flag = -1;}
   });
 
