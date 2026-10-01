@@ -310,7 +310,7 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
       }
 
       // compton scattering
-      if (is_compton_enabled_) {
+      if (is_compton_enabled_ && sigma_s > 0.0) {
         // use partially updated gas temperature
         tgas = tgasnew;
 
@@ -582,7 +582,7 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
       }
 
       // compton scattering
-      if (is_compton_enabled_) {
+      if (is_compton_enabled_ && sigma_s > 0.0) {
         // use partially updated gas temperature
         tgas = tgasnew;
 
