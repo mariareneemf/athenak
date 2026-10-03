@@ -87,11 +87,7 @@ void UserOpacityFunction(// density and density scale
     Real k_floor = 1.0e-6;
     sigma_a = dens*k_floor*density_scale*length_scale;
     sigma_p = dens*k_floor*density_scale*length_scale;
-    if (temp_cgs < temp_recomb_cgs){
-      sigma_s = 0.0;
-    }else{
-      sigma_s = dens*k_floor*density_scale*length_scale;
-    }
+    sigma_s = 0.0;
     return;
   }
   
