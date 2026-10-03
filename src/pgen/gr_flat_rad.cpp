@@ -310,6 +310,68 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
         kappa_planck_host(j,i) = combine_planck_table(j, i);
       }
     }
+
+    // Precompute log-space grid parameters for uniform-log lookup
+    Real log_tmin    = std::log10(temp_host(0));
+    Real log_tmax    = std::log10(temp_host(n_temp - 1));
+    Real log_rhomin  = std::log10(rho_host(0));
+    Real log_rhomax  = std::log10(rho_host(n_rho  - 1));
+    Real inv_dlogT   = (Real)(n_temp - 1) / (log_tmax   - log_tmin  );
+    Real inv_dlogrho = (Real)(n_rho  - 1) / (log_rhomax - log_rhomin);
+
+    // Uniform-log-spacing check
+    Real tol = 1e-4;
+    Real dlogT_expected = 1.0 / inv_dlogT;
+    Real dlogR_expected = 1.0 / inv_dlogrho;
+    for (int i = 1; i < n_temp; ++i) {
+      Real d = std::log10(temp_host(i)) - std::log10(temp_host(i-1));
+      if (std::fabs(d - dlogT_expected) > tol) {
+        std::cerr << "opacity temp_grid is not uniform in log10 (at i=" << i
+                  << ", d=" << d << ", expected=" << dlogT_expected << ")" << std::endl;
+        return;
+      }
+    }
+    for (int i = 1; i < n_rho; ++i) {
+      Real d = std::log10(rho_host(i)) - std::log10(rho_host(i-1));
+      if (std::fabs(d - dlogR_expected) > tol) {
+        std::cerr << "opacity rho_grid is not uniform in log10 (at i=" << i
+                  << ", d=" << d << ", expected=" << dlogR_expected << ")" << std::endl;
+        return;
+      }
+    }
+
+    data.log_tmin    = log_tmin;
+    data.log_rhomin  = log_rhomin;
+    data.inv_dlogT   = inv_dlogT;
+    data.inv_dlogrho = inv_dlogrho;
+
+    // Store log10(kappa) in place: interpolation is log-space bilinear
+    for (int j = 0; j < n_temp; ++j) {
+      for (int i = 0; i < n_rho; ++i) {
+        kappa_ross_host(j,i)   = std::log10(kappa_ross_host(j,i));
+        kappa_planck_host(j,i) = std::log10(kappa_planck_host(j,i));
+      }
+    }
+
+    // SANITY CHECK
+    std::cout << "[opcheck loader] n_temp=" << n_temp << " n_rho=" << n_rho
+              << " log_tmin=" << log_tmin << " log_tmax=" << log_tmax
+              << " log_rhomin=" << log_rhomin << " log_rhomax=" << log_rhomax
+              << " inv_dlogT=" << inv_dlogT << " inv_dlogrho=" << inv_dlogrho
+              << " dlogT=" << dlogT_expected << " dlogR=" << dlogR_expected
+              << " low_rho_threshold_cgs=" << pmbp->prad->low_rho_threshold_cgs
+              << " low_temp_threshold_cgs=" << pmbp->prad->low_temp_threshold_cgs
+              << std::endl;
+    std::cout << "[opcheck loader] sample log10 kappas: "
+              << "log kR(0,0)="      << kappa_ross_host(0,0)
+              << " log kR(nt-1,0)="  << kappa_ross_host(n_temp-1,0)
+              << " log kR(0,nr-1)="  << kappa_ross_host(0,n_rho-1)
+              << " log kR(nt-1,nr-1)=" << kappa_ross_host(n_temp-1,n_rho-1)
+              << std::endl;
+    // END SANITY CHECK 
+
+
+
     
     // copy to instance
     Kokkos::deep_copy(data.rho_grid,  rho_host);

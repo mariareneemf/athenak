@@ -73,6 +73,8 @@ Radiation::Radiation(MeshBlockPack *ppack, ParameterInput *pin) :
   // radiation constant, and source term behavior.
   if (rad_source) {
     kappa_s = pin->GetReal("radiation","kappa_s");
+    low_rho_threshold_cgs = pin->GetOrAddReal("radiation","low_rho_threshold_cgs",1.0e-16);
+    low_temp_threshold_cgs = pin->GetOrAddReal("radiation","low_temp_threshold_cgs",1.0e4);
     power_opacity = pin->GetOrAddBoolean("radiation","power_opacity",false);
     if (!(power_opacity)) {
       kappa_a = pin->GetReal("radiation","kappa_a");

@@ -89,6 +89,8 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
   Real &kappa_a_ = kappa_a;
   Real &kappa_s_ = kappa_s;
   Real &kappa_p_ = kappa_p;
+  Real &low_rho_threshold_cgs_ = low_rho_threshold_cgs;
+  Real &low_temp_threshold_cgs_ = low_temp_threshold_cgs;
   bool &power_opacity_ = power_opacity;
   auto &nh_c_ = nh_c;
   auto &tt = tet_c;
@@ -127,6 +129,8 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
   Kokkos::View<Real*>  opacity_temp_grid;
   Kokkos::View<Real**> opacity_kappa_ross;
   Kokkos::View<Real**> opacity_kappa_planck;
+  Real opacity_log_tmin = 0.0, opacity_log_rhomin = 0.0;
+  Real opacity_inv_dlogT = 0.0, opacity_inv_dlogrho = 0.0;
 
   if (user_opacity) {
       auto& opacity_data = OpacityData::GetInstance();
@@ -136,6 +140,10 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
       opacity_temp_grid    = opacity_data.temp_grid;
       opacity_kappa_ross   = opacity_data.kappa_ross;
       opacity_kappa_planck = opacity_data.kappa_planck;
+      opacity_log_tmin     = opacity_data.log_tmin;
+      opacity_log_rhomin   = opacity_data.log_rhomin;
+      opacity_inv_dlogT    = opacity_data.inv_dlogT;
+      opacity_inv_dlogrho  = opacity_data.inv_dlogrho;
   }
 
   // compute implicit source term
@@ -457,7 +465,10 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
           sigma_a, sigma_s, sigma_p,
           opacity_n_rho, opacity_n_temp,
           opacity_rho_grid, opacity_temp_grid,
-          opacity_kappa_ross, opacity_kappa_planck);
+          opacity_kappa_ross, opacity_kappa_planck,
+          opacity_log_tmin, opacity_log_rhomin,
+          opacity_inv_dlogT, opacity_inv_dlogrho,
+          low_rho_threshold_cgs_, low_temp_threshold_cgs_);
       Real dtcsiga = dt_*sigma_a;
       Real dtcsigs = dt_*sigma_s;
       Real dtcsigp = dt_*sigma_p;

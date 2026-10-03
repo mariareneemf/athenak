@@ -67,7 +67,11 @@ void UserOpacityFunction(// density and density scale
                      const Kokkos::View<Real*>& rho_grid,
                      const Kokkos::View<Real*>& temp_grid,
                      const Kokkos::View<Real**>& kappa_ross,
-                     const Kokkos::View<Real**>& kappa_planck){
+                     const Kokkos::View<Real**>& kappa_planck,
+                     const Real log_tmin, const Real log_rhomin,
+                     const Real inv_dlogT, const Real inv_dlogrho,
+                     const Real low_rho_threshold_cgs,
+                     const Real low_temp_threshold_cgs){
   
 
   //allocate individual views for the Opacity Data structure
@@ -76,8 +80,23 @@ void UserOpacityFunction(// density and density scale
 
   Real dens_cgs = dens * density_scale;
   Real temp_cgs = temp * temperature_scale;
+  Real temp_recomb_cgs = 3.0e3; //below this H is neutral, no scattering
+
+  //Apply opacity floors for background gas (e.g. 10d_amb and T<1e4K)
+  if (dens_cgs < low_rho_threshold_cgs && temp_cgs < low_temp_threshold_cgs){
+    Real k_floor = 1.0e-6;
+    sigma_a = dens*k_floor*density_scale*length_scale;
+    sigma_p = dens*k_floor*density_scale*length_scale;
+    if (temp_cgs < temp_recomb_cgs){
+      sigma_s = 0.0;
+    }else{
+      sigma_s = dens*k_floor*density_scale*length_scale;
+    }
+    return;
+  }
   
   InterpolateKappa(n_rho, n_temp, rho_grid, temp_grid, kappa_ross, kappa_planck,
+		   log_tmin, log_rhomin, inv_dlogT, inv_dlogrho,
                    dens_cgs, temp_cgs, k_s, kappa_ross_interp, kappa_planck_interp);
   
   //if (dens_cgs>1.0e-14){
@@ -87,8 +106,6 @@ void UserOpacityFunction(// density and density scale
   Real kappa_ross_cgs = 0.0;
   Real kappa_sct_cgs = 0.0;
   Real temp_ion_cgs = 1.0e4;
-  Real temp_recomb_cgs = 3.0e3; //below this H is neutral, no scattering
-  Real temp_ion = temp_ion_cgs/temperature_scale;
 
   //k_s is in c.g.s
   if (kappa_ross_interp >= k_s){ //T>Tmax case always enters this branch
@@ -111,13 +128,6 @@ void UserOpacityFunction(// density and density scale
   
   //in code, kappa_planck is difference between kappa_planck and kappa_ross
   Real kappa_planck_cgs = kappa_planck_interp - kappa_ross_cgs;
-
-  //add another density cut, higher opacity and density before injecting stream
-  if (dens*density_scale < 1.0e-14){
-    kappa_sct_cgs = 1.0e-4; //0.32;
-    kappa_ross_cgs = 1.0e-4; //1.0;
-    kappa_planck_cgs = 1.0e-4; //1.0;
-  }
   
   //assign to cell
   sigma_a = dens*kappa_ross_cgs*density_scale*length_scale;
