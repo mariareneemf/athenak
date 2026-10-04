@@ -6,6 +6,7 @@
 //! \file radiation_source.cpp
 
 #include "athena.hpp"
+#include "globals.hpp"
 #include "mesh/mesh.hpp"
 #include "driver/driver.hpp"
 #include "coordinates/cartesian_ks.hpp"
@@ -145,7 +146,21 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
       opacity_inv_dlogT    = opacity_data.inv_dlogT;
       opacity_inv_dlogrho  = opacity_data.inv_dlogrho;
   }
-
+  // SANITY CHECK: reset counter on stage 1, capture into lambda 
+  // Comment out this whole block and the matching block below in the lambda to disable.
+  if (user_opacity && stage == 1) {
+    Kokkos::deep_copy(opcheck_counter, 0);
+  }
+  auto opcheck_counter_ = opcheck_counter;
+  int opcheck_rank_capture_ = global_variable::my_rank;
+  Real opcheck_T_max_cgs_ = 0.0;
+  if (user_opacity) {
+    Real log_tmax_cgs = opacity_log_tmin
+                        + (Real)(opacity_n_temp - 1) / opacity_inv_dlogT;
+    opcheck_T_max_cgs_ = pow(10.0, log_tmax_cgs);
+  }
+  //END SANITY CHECK
+  
   // compute implicit source term
   // Separate par_for loops per opacity path: avoids inlining both functions
   // into one kernel, keeping per-thread register usage within Intel PVC limits.
@@ -469,6 +484,56 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
           opacity_log_tmin, opacity_log_rhomin,
           opacity_inv_dlogT, opacity_inv_dlogrho,
           low_rho_threshold_cgs_, low_temp_threshold_cgs_);
+
+
+      // SANITY CHECK (comment out this block to disable) 
+      // At most 1 cell per case per rank per par_for; counter resets at start of stage 1.
+      {
+        Real T_cgs_check   = tgas * temperature_scale_;
+        Real rho_cgs_check = wdn  * density_scale_;
+        // Case 0: Floor (ambient background)
+        if (rho_cgs_check < low_rho_threshold_cgs_ && T_cgs_check < low_temp_threshold_cgs_) {
+          int c = Kokkos::atomic_fetch_add(&opcheck_counter_(0), 1);
+          if (c < 1) {
+            printf("[opcheck Floor rank=%d] m=%d (k,j,i)=(%d,%d,%d) T=%.3e rho=%.3e sigma_a=%.3e sigma_s=%.3e sigma_p=%.3e\n",
+                   opcheck_rank_capture_, m, k, j, i, T_cgs_check, rho_cgs_check,
+                   sigma_a, sigma_s, sigma_p);
+          }
+        }
+        // Case 1: Kramers T extrapolation (T above table max)
+        if (T_cgs_check > opcheck_T_max_cgs_) {
+          int c = Kokkos::atomic_fetch_add(&opcheck_counter_(1), 1);
+          if (c < 1) {
+            printf("[opcheck KramersT rank=%d] m=%d (k,j,i)=(%d,%d,%d) T=%.3e rho=%.3e sigma_a=%.3e sigma_s=%.3e sigma_p=%.3e\n",
+                   opcheck_rank_capture_, m, k, j, i, T_cgs_check, rho_cgs_check,
+                   sigma_a, sigma_s, sigma_p);
+          }
+        }
+        // Case 2: Kramers rho extrapolation (rho below table min, T>=T_ion)
+        if (rho_cgs_check < 1.0e-14 && T_cgs_check >= 1.0e4) {
+          int c = Kokkos::atomic_fetch_add(&opcheck_counter_(2), 1);
+          if (c < 1) {
+            printf("[opcheck KramersRho rank=%d] m=%d (k,j,i)=(%d,%d,%d) T=%.3e rho=%.3e sigma_a=%.3e sigma_s=%.3e sigma_p=%.3e\n",
+                   opcheck_rank_capture_, m, k, j, i, T_cgs_check, rho_cgs_check,
+                   sigma_a, sigma_s, sigma_p);
+          }
+        }
+        // Case 3: Interior (standard, not floor/Kramers)
+        bool is_floor   = (rho_cgs_check < low_rho_threshold_cgs_ && T_cgs_check < low_temp_threshold_cgs_);
+        bool is_krT     = (T_cgs_check > opcheck_T_max_cgs_);
+        bool is_krRho   = (rho_cgs_check < 1.0e-14 && T_cgs_check >= 1.0e4);
+        if (!is_floor && !is_krT && !is_krRho) {
+          int c = Kokkos::atomic_fetch_add(&opcheck_counter_(3), 1);
+          if (c < 1) {
+            printf("[opcheck Interior rank=%d] m=%d (k,j,i)=(%d,%d,%d) T=%.3e rho=%.3e sigma_a=%.3e sigma_s=%.3e sigma_p=%.3e\n",
+                   opcheck_rank_capture_, m, k, j, i, T_cgs_check, rho_cgs_check,
+                   sigma_a, sigma_s, sigma_p);
+          }
+        }
+      }
+      // END SANITY CHECK 
+
+      
       Real dtcsiga = dt_*sigma_a;
       Real dtcsigs = dt_*sigma_s;
       Real dtcsigp = dt_*sigma_p;

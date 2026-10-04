@@ -96,7 +96,10 @@ Radiation::Radiation(MeshBlockPack *ppack, ParameterInput *pin) :
     affect_fluid = pin->GetOrAddBoolean("radiation","affect_fluid",true);
     //xs: read in user opacity flag
     user_opacity = pin->GetOrAddBoolean("radiation","user_opacity",false);
-    
+    // SANITY CHECK counter: 4 slots (Floor, KramersT, KramersRho, Interior)
+    if (user_opacity) {
+      opcheck_counter = Kokkos::View<int*>("opcheck_counter", 4);
+    }    
   }
 
   // Check for fluid evolution
