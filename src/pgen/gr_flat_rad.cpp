@@ -353,7 +353,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       }
     }
 
-    // SANITY CHECK
+    /*// SANITY CHECK
     std::cout << "[opcheck loader] n_temp=" << n_temp << " n_rho=" << n_rho
               << " log_tmin=" << log_tmin << " log_tmax=" << log_tmax
               << " log_rhomin=" << log_rhomin << " log_rhomax=" << log_rhomax
@@ -368,7 +368,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
               << " log kR(0,nr-1)="  << kappa_ross_host(0,n_rho-1)
               << " log kR(nt-1,nr-1)=" << kappa_ross_host(n_temp-1,n_rho-1)
               << std::endl;
-    // END SANITY CHECK 
+    // END SANITY CHECK */
 
 
 
