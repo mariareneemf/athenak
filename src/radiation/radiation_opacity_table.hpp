@@ -120,8 +120,8 @@ void InterpolateKappa(int n_rho, int n_temp,
                       Real &kappa_ross, Real &kappa_planck){
 
 //STEP 1: fractional-index positions in log space
-  Real logT   = log10(tgas);
-  Real logrho = log10(rho);
+  Real logT   = log10(fmax(tgas,1.0e-10));
+  Real logrho = log10(fmax(rho,1.0e-32));
   Real log_tmax   = log_tmin   + (Real)(n_temp - 1) / inv_dlogT;
   Real log_rhomax = log_rhomin + (Real)(n_rho  - 1) / inv_dlogrho;
 

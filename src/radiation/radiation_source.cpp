@@ -319,7 +319,7 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
           // absorption and scattering inform the Compton update
           if (excise) {
             bool apply_excision = (rad_mask_(m,k,j,i) ||
-                                   (!(is_compton_enabled_) && fabs(n_0) < n_0_floor_));
+                                   (!(is_compton_enabled_ && sigma_s>0.0) && fabs(n_0) < n_0_floor_));
             if (apply_excision) { i0_(m,n,k,j,i) = 0.0; }
           }
         }
@@ -495,7 +495,7 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
         if (rho_cgs_check < low_rho_threshold_cgs_ && T_cgs_check < low_temp_threshold_cgs_) {
           int c = Kokkos::atomic_fetch_add(&opcheck_counter_(0), 1);
           if (c < 1) {
-            printf("[opcheck Floor rank=%d] m=%d (k,j,i)=(%d,%d,%d) T=%.3e rho=%.3e sigma_a=%.3e sigma_s=%.3e sigma_p=%.3e\n",
+            printf("[opcheck Floor rank=%d] m=%d (k,j,i)=(%d,%d,%d) T=%.6e rho=%.6e sigma_a=%.6e sigma_s=%.6e sigma_p=%.6e\n",
                    opcheck_rank_capture_, m, k, j, i, T_cgs_check, rho_cgs_check,
                    sigma_a, sigma_s, sigma_p);
           }
@@ -504,7 +504,7 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
         if (T_cgs_check > opcheck_T_max_cgs_) {
           int c = Kokkos::atomic_fetch_add(&opcheck_counter_(1), 1);
           if (c < 1) {
-            printf("[opcheck KramersT rank=%d] m=%d (k,j,i)=(%d,%d,%d) T=%.3e rho=%.3e sigma_a=%.3e sigma_s=%.3e sigma_p=%.3e\n",
+            printf("[opcheck KramersT rank=%d] m=%d (k,j,i)=(%d,%d,%d) T=%.6e rho=%.6e sigma_a=%.6e sigma_s=%.6e sigma_p=%.6e\n",
                    opcheck_rank_capture_, m, k, j, i, T_cgs_check, rho_cgs_check,
                    sigma_a, sigma_s, sigma_p);
           }
@@ -513,7 +513,7 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
         if (rho_cgs_check < 1.0e-14 && T_cgs_check >= 1.0e4) {
           int c = Kokkos::atomic_fetch_add(&opcheck_counter_(2), 1);
           if (c < 1) {
-            printf("[opcheck KramersRho rank=%d] m=%d (k,j,i)=(%d,%d,%d) T=%.3e rho=%.3e sigma_a=%.3e sigma_s=%.3e sigma_p=%.3e\n",
+            printf("[opcheck KramersRho rank=%d] m=%d (k,j,i)=(%d,%d,%d) T=%.6e rho=%.6e sigma_a=%.6e sigma_s=%.6e sigma_p=%.6e\n",
                    opcheck_rank_capture_, m, k, j, i, T_cgs_check, rho_cgs_check,
                    sigma_a, sigma_s, sigma_p);
           }
@@ -525,7 +525,7 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
         if (!is_floor && !is_krT && !is_krRho) {
           int c = Kokkos::atomic_fetch_add(&opcheck_counter_(3), 1);
           if (c < 1) {
-            printf("[opcheck Interior rank=%d] m=%d (k,j,i)=(%d,%d,%d) T=%.3e rho=%.3e sigma_a=%.3e sigma_s=%.3e sigma_p=%.3e\n",
+            printf("[opcheck Interior rank=%d] m=%d (k,j,i)=(%d,%d,%d) T=%.6e rho=%.6e sigma_a=%.6e sigma_s=%.6e sigma_p=%.6e\n",
                    opcheck_rank_capture_, m, k, j, i, T_cgs_check, rho_cgs_check,
                    sigma_a, sigma_s, sigma_p);
           }
@@ -644,7 +644,7 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
           // absorption and scattering inform the Compton update
           if (excise) {
             bool apply_excision = (rad_mask_(m,k,j,i) ||
-                                   (!(is_compton_enabled_) && fabs(n_0) < n_0_floor_));
+                                   (!(is_compton_enabled_ && sigma_s>0.0) && fabs(n_0) < n_0_floor_));
             if (apply_excision) { i0_(m,n,k,j,i) = 0.0; }
           }
         }
