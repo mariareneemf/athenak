@@ -63,7 +63,9 @@ struct tde_pgen{
   Real amr_maxdens, amr_mindens;
   Real amr_maxd2, amr_mind2;
   Real amr_zmax;
-
+  Real amr_r_mid, amr_r_out;
+  int amrlvl_in, amrlvl_mid, amrlvl_out;
+  
   Real hst_radii_1, hst_radii_2;
 
   //opacity table
@@ -161,6 +163,11 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     tde.amr_maxd2   = pin->GetReal("problem", "amr_maxd2");
     tde.amr_mind2   = pin->GetReal("problem", "amr_mind2");
     tde.amr_zmax    = pin->GetReal("problem", "amr_zmax");
+    tde.amr_r_mid   = pin->GetReal("problem", "amr_r_mid");
+    tde.amr_r_out   = pin->GetReal("problem", "amr_r_out");
+    tde.amrlvl_in   = pin->GetInteger("problem", "amrlvl_in");
+    tde.amrlvl_mid  = pin->GetInteger("problem", "amrlvl_mid");
+    tde.amrlvl_out  = pin->GetInteger("problem", "amrlvl_out");
   }
   //stream structure
   tde.uniform_stream = pin->GetOrAddInteger("problem", "uniform_stream", 1);
@@ -1418,12 +1425,19 @@ void RefinementCondition(MeshBlockPack* pmbp) {
   auto &three_d = pmbp->pmesh->three_d;
   auto &size = pmbp->pmb->mb_size;
   auto &w0 = pmbp->phydro->w0;
+  auto &mblev = pmbp->pmb->mb_lev;
+  int root_lev = pmbp->pmesh->root_level;
 
   Real maxdens = tde.amr_maxdens;
   Real mindens = tde.amr_mindens;
   Real maxd2 = tde.amr_maxd2;
   Real mind2 = tde.amr_mind2;
   Real zmax = tde.amr_zmax;
+  Real r_mid = tde.amr_r_mid;
+  Real r_out = tde.amr_r_out;
+  int lvl_in = tde.amrlvl_in;
+  int lvl_mid = tde.amrlvl_mid;
+  int lvl_out = tde.amrlvl_out;
 
   par_for_outer("UserProblem_AMR::REFCOND", DevExeSpace(), 0, 0, 0, (nmb - 1),
   KOKKOS_LAMBDA(TeamMember_t tmember, const int m) {
@@ -1458,12 +1472,26 @@ void RefinementCondition(MeshBlockPack* pmbp) {
     //largest |z| spanned by this meshblock
     Real zblk = fmax(fabs(size.d_view(m).x3min), fabs(size.d_view(m).x3max));
 
-    //only derefine when flag has not been set by other criteria
+    //minimum radius spanned by this MeshBlock
+    Real rx = fmax(0.0, fmax(size.d_view(m).x1min, -size.d_view(m).x1max));
+    Real ry = fmax(0.0, fmax(size.d_view(m).x2min, -size.d_view(m).x2max));
+    Real rz = fmax(0.0, fmax(size.d_view(m).x3min, -size.d_view(m).x3max));
+    Real rmin = sqrt(rx*rx + ry*ry + rz*rz);
+
+    //maximum physical level (0=root grid) allowed in this radial zone
+    int cap = (rmin > r_out) ? lvl_out : ((rmin > r_mid) ? lvl_mid : lvl_in);
+    int lev = mblev.d_view(m) - root_lev;
+    
+    //only mark for derefinement when flag has not been set by other criteria
     int &flag = refine_flag.d_view(m+mbs);
     bool ref_dens = (team_dmax > maxdens);
     bool ref_d2 = ((team_d2max > maxd2) && (team_dmax > 2.0*mindens));
     if ((ref_dens || ref_d2) && (zblk < zmax)) {flag = 1;}
     if ((team_dmax < mindens) && (team_d2max < mind2) && (flag == 0)) {flag = -1;}
+        
+    // radial level cap, applied to flags set by this and any preceding criterion
+    if ((flag > 0) && (lev >= cap)) {flag = 0;}
+    if (lev > cap) {flag = -1;}
   });
 
   // sync device array with host
