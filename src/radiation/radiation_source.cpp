@@ -146,7 +146,7 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
       opacity_inv_dlogT    = opacity_data.inv_dlogT;
       opacity_inv_dlogrho  = opacity_data.inv_dlogrho;
   }
-  // SANITY CHECK: reset counter on stage 1, capture into lambda 
+  /*// SANITY CHECK: reset counter on stage 1, capture into lambda 
   // Comment out this whole block and the matching block below in the lambda to disable.
   if (user_opacity && stage == 1) {
     Kokkos::deep_copy(opcheck_counter, 0);
@@ -159,7 +159,7 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
                         + (Real)(opacity_n_temp - 1) / opacity_inv_dlogT;
     opcheck_T_max_cgs_ = pow(10.0, log_tmax_cgs);
   }
-  //END SANITY CHECK
+  //END SANITY CHECK*/
   
   // compute implicit source term
   // Separate par_for loops per opacity path: avoids inlining both functions
@@ -486,7 +486,7 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
           low_rho_threshold_cgs_, low_temp_threshold_cgs_);
 
 
-      // SANITY CHECK (comment out this block to disable) 
+      /*// SANITY CHECK (comment out this block to disable) 
       // At most 1 cell per case per rank per par_for; counter resets at start of stage 1.
       {
         Real T_cgs_check   = tgas * temperature_scale_;
@@ -531,7 +531,7 @@ TaskStatus Radiation::RadFluidCoupling(Driver *pdriver, int stage) {
           }
         }
       }
-      // END SANITY CHECK 
+      // END SANITY CHECK */
 
       
       Real dtcsiga = dt_*sigma_a;
