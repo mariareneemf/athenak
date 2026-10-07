@@ -168,6 +168,46 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     tde.amrlvl_in   = pin->GetInteger("problem", "amrlvl_in");
     tde.amrlvl_mid  = pin->GetInteger("problem", "amrlvl_mid");
     tde.amrlvl_out  = pin->GetInteger("problem", "amrlvl_out");
+
+    //check AMR level-cap parameters
+    int maxlvl = pmy_mesh_->max_level - pmy_mesh_->root_level;
+    if (tde.amr_r_mid >= tde.amr_r_out) {
+      if (global_variable::my_rank == 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Require amr_r_mid < amr_r_out, but amr_r_mid="
+                  << tde.amr_r_mid << " amr_r_out=" << tde.amr_r_out << std::endl;
+      }
+      exit(EXIT_FAILURE);
+    }
+    if (tde.amrlvl_in  < 0 || tde.amrlvl_in  > maxlvl ||
+        tde.amrlvl_mid < 0 || tde.amrlvl_mid > maxlvl ||
+        tde.amrlvl_out < 0 || tde.amrlvl_out > maxlvl) {
+      if (global_variable::my_rank == 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "amrlvl_in/mid/out must be within [0," << maxlvl
+                  << "], but are " << tde.amrlvl_in << "/" << tde.amrlvl_mid << "/"
+                  << tde.amrlvl_out << std::endl;
+      }
+      exit(EXIT_FAILURE);
+    }
+    if (tde.amrlvl_in < tde.amrlvl_mid || tde.amrlvl_mid < tde.amrlvl_out) {
+      if (global_variable::my_rank == 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Require amrlvl_in >= amrlvl_mid >= amrlvl_out, but "
+                  << "are " << tde.amrlvl_in << "/" << tde.amrlvl_mid << "/"
+                  << tde.amrlvl_out << std::endl;
+      }
+      exit(EXIT_FAILURE);
+    }
+    if ((tde.amrlvl_in - tde.amrlvl_mid) > 1 || (tde.amrlvl_mid - tde.amrlvl_out) > 1) {
+      if (global_variable::my_rank == 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Adjacent amrlvl_* must differ by at most 1 to respect "
+                  << "2:1 nesting, but are " << tde.amrlvl_in << "/" << tde.amrlvl_mid
+                  << "/" << tde.amrlvl_out << std::endl;
+      }
+      exit(EXIT_FAILURE);
+    }
   }
   //stream structure
   tde.uniform_stream = pin->GetOrAddInteger("problem", "uniform_stream", 1);
