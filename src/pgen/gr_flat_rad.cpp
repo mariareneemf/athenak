@@ -708,6 +708,16 @@ void FixedStreamInflow(Mesh *pm) {
   auto w0_ = pm->pmb_pack->phydro->w0;
   Real g_gamma = pm->pmb_pack->phydro->peos->eos_data.gamma;
 
+  int nvars;
+  int nvars_hyd_mhd;
+  if (pm->pmb_pack->phydro != nullptr) {
+    nvars = pm->pmb_pack->phydro->nhydro + pm->pmb_pack->phydro->nscalars;
+    nvars_hyd_mhd = nvars = pm->pmb_pack->phydro->nhydro;
+  } else if (pm->pmb_pack->pmhd != nullptr) {
+    nvars = pm->pmb_pack->pmhd->nmhd + pm->pmb_pack->pmhd->nscalars;
+    nvars_hyd_mhd =  pm->pmb_pack->pmhd->nmhd;
+  } 
+
   // intensity array and n_angle if radiation is enabled
   const bool is_radiation_enabled = (pm->pmb_pack->prad != nullptr);
   DvceArray5D<Real> i0_; int nang1;
@@ -762,8 +772,6 @@ void FixedStreamInflow(Mesh *pm) {
     Real &x3min = size.d_view(m).x3min;
     Real &x3max = size.d_view(m).x3max;
     Real x3v = CellCenterX(k-ks, indcs.nx3, x3min, x3max);
-
-    
 
     //Real rho, internal energy, uu1, uu2, uu3;
     if (mb_bcs.d_view(m,BoundaryFace::inner_x1) == BoundaryFlag::user) {
@@ -871,7 +879,11 @@ void FixedStreamInflow(Mesh *pm) {
         w0_(m,IM2,k,j,(ie+i+1)) = uu2;
         w0_(m,IM3,k,j,(ie+i+1)) = uu3;
 
-        //printf("i:%d, local density:%g, temp:%g, ein:%g\n", ie+i+1, w0_(m,IDN,k,j,(ie+i+1)), w0_(m,IEN,k,j,(ie+i+1))/w0_(m,IDN,k,j,(ie+i+1))/(g_gamma-1.0), w0_(m,IEN,k,j,(ie+i+1)));
+	//paint injected gas with scalars
+	//use the last scalar entry
+	if (nvars > nvars_hyd_mhd)
+	  w0_(m,nvars-1,k,j,(ie+i+1)) = 1.0;
+        
       }else{//non-injection cells
         //ComputePrimitiveSingle(x1v,x2v,x3v,coord,bondi_, rho,pgas,uu1,uu2,uu3);
         w0_(m,IDN,k,j,(ie+i+1)) = w0_(m,IDN,k,j,ie);
@@ -907,13 +919,17 @@ void FixedStreamInflow(Mesh *pm) {
           w0_(m,IM1,k,j,(ie+i+1)) = uu1;
           w0_(m,IM2,k,j,(ie+i+1)) = uu2;
           w0_(m,IM3,k,j,(ie+i+1)) = uu3;
-
-      
+     
         }else{//use normal frame velocity to determine inflow
           w0_(m,IM1,k,j,(ie+i+1)) = fmax(0.0, w0_(m,IM1,k,j,ie));
           w0_(m,IM2,k,j,(ie+i+1)) = w0_(m,IM2,k,j,ie);
           w0_(m,IM3,k,j,(ie+i+1)) = w0_(m,IM3,k,j,ie);
+	  
         }//close use normal frame vel
+
+	if (nvars > nvars_hyd_mhd)
+	  w0_(m,nvars-1,k,j,(ie+i+1)) = w0_(m, nvars-1,k,j,ie);
+	
       }//close non-injection cells
     }//close outer x1 boundary
   });//close par for
