@@ -712,7 +712,7 @@ void FixedStreamInflow(Mesh *pm) {
   int nvars_hyd_mhd;
   if (pm->pmb_pack->phydro != nullptr) {
     nvars = pm->pmb_pack->phydro->nhydro + pm->pmb_pack->phydro->nscalars;
-    nvars_hyd_mhd = nvars = pm->pmb_pack->phydro->nhydro;
+    nvars_hyd_mhd = pm->pmb_pack->phydro->nhydro;
   } else if (pm->pmb_pack->pmhd != nullptr) {
     nvars = pm->pmb_pack->pmhd->nmhd + pm->pmb_pack->pmhd->nscalars;
     nvars_hyd_mhd =  pm->pmb_pack->pmhd->nmhd;
