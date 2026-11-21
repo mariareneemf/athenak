@@ -588,11 +588,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       Real den = tde_.d_amb;
       Real pres = tde_.p_amb;
 
-      if (!is_radiation_enabled && tde_.rad_dom_lim){
-        Real Tcode = pres/den;
-        pres = tde_.arad_code*SQR(SQR(Tcode))/3.0;
-      }
-
       // To be consistent with the excision algorithm,
       // we have to recalculate r; we try to avoid excising cells within the horizon which
       // might have a corner sticking out of the horizon.
