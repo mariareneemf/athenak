@@ -94,7 +94,9 @@ Real EquationC22(Real z, Real &u_d, Real q, Real r, EOS_Data eos) {
   Real const w = sqrt(1.0 + z*z);         // (C15)
   Real const wd = u_d/w;                  // (C15)
   Real eps = w*q - z*r + (z*z)/(1.0 + w); // (C16)
-  Real epsmin = fmax(eos.pfloor/(wd*gm1), eos.sfloor*pow(wd, gm1)/gm1);
+  // Real epsmin = fmax(eos.pfloor/(wd*gm1), eos.sfloor*pow(wd, gm1)/gm1);
+  // pressure floor at current density guess (rho*tfloor if tfloor set)
+  Real epsmin = fmax(eos.PressureFloor(wd)/(wd*gm1), eos.sfloor*pow(wd, gm1)/gm1);
   eps = fmax(eps, epsmin);                // (C18)
   Real const h = 1.0 + eos.gamma*eps;     // (C1) & (C21)
   return (z - r/h); // (C22)
@@ -123,8 +125,14 @@ void SingleC2P_IdealSRHyd(HydCons1D &u, const EOS_Data &eos, const Real s2, HydP
   }
 
   // apply energy floor
-  if (u.e < eos.pfloor/gm1) {
-    u.e = eos.pfloor/gm1;
+  // if (u.e < eos.pfloor/gm1) {
+  //   u.e = eos.pfloor/gm1;
+  //   efloor_used = true;
+  // }
+  // before inversion only u.d is known, so rho*tfloor uses u.d (if tfloor set)
+  Real pfloor_temp = eos.PressureFloor(u.d);
+  if (u.e < pfloor_temp/gm1) {
+    u.e = pfloor_temp/gm1;
     efloor_used = true;
   }
 
@@ -182,7 +190,8 @@ void SingleC2P_IdealSRHyd(HydCons1D &u, const EOS_Data &eos, const Real s2, HydP
   // of a C2P failure.
   if (iter_used==max_iterations) {
     w.d = eos.dfloor;
-    w.e = eos.pfloor/gm1;
+    // w.e = eos.pfloor/gm1;
+    w.e = eos.PressureFloor(w.d)/gm1;  // floored density on failure
     w.vx = 0.0;
     w.vy = 0.0;
     w.vz = 0.0;
@@ -202,7 +211,9 @@ void SingleC2P_IdealSRHyd(HydCons1D &u, const EOS_Data &eos, const Real s2, HydP
 
   // compute specific internal energy density then apply floor
   Real eps = lor*q - z*r + (z*z)/(1.0 + lor);   // (C16)
-  Real epsmin = fmax(eos.pfloor/(dens*gm1), eos.sfloor*pow(dens, gm1)/gm1);
+  // Real epsmin = fmax(eos.pfloor/(dens*gm1), eos.sfloor*pow(dens, gm1)/gm1);
+  // pressure floor at new primitive density (rho*tfloor if tfloor set)
+  Real epsmin = fmax(eos.PressureFloor(dens)/(dens*gm1), eos.sfloor*pow(dens, gm1)/gm1);
   if (eps <= epsmin) {
     eps = epsmin;
     efloor_used = true;

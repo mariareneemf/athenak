@@ -50,7 +50,10 @@ void ReconCellT(const EOS_Data &eos, const bool apply_floors,
   constexpr int dk = (ivx == IVZ) ? 1 : 0;
 
   const Real dfloor = eos.dfloor;
-  const Real efloor = eos.is_ideal ? (eos.pfloor/(eos.gamma - 1.0)) : 0.0;
+  // const Real efloor = eos.is_ideal ? (eos.pfloor/(eos.gamma - 1.0)) : 0.0;
+  // with tfloor set, the energy floor needs face density: applied in ReconDispatch
+  const Real efloor = (eos.is_ideal && !eos.use_tfloor) ?
+                      (eos.pfloor/(eos.gamma - 1.0)) : 0.0;
 
   Real ql_val, qr_val;
   if constexpr (recon == ReconstructionMethod::dc) {
@@ -181,6 +184,24 @@ inline void ReconDispatch(ReconstructionMethod recon, const char *name, int nmb1
               eos, apply_floors, m, n, k, j, i, q, ql, qr);
         });
       break;
+  }
+
+  // temperature floor on face states (same methods that apply floors in ReconCellT).
+  // Separate pass since it needs the face density, reconstructed by another thread.
+  if (apply_floors && eos.is_ideal && eos.use_tfloor &&
+      (recon == ReconstructionMethod::ppmx || recon == ReconstructionMethod::wenoz ||
+       recon == ReconstructionMethod::teno)) {
+    constexpr int di = (ivx == IVX) ? 1 : 0;
+    constexpr int dj = (ivx == IVY) ? 1 : 0;
+    constexpr int dk = (ivx == IVZ) ? 1 : 0;
+    const Real tfloor_gm1 = eos.tfloor/(eos.gamma - 1.0);
+    par_for("recon_tfloor", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        // same face locations as written in ReconCellT
+        ql(m, IEN, k + dk, j + dj, i + di) = fmax(ql(m, IEN, k + dk, j + dj, i + di),
+                                     ql(m, IDN, k + dk, j + dj, i + di)*tfloor_gm1);
+        qr(m, IEN, k, j, i) = fmax(qr(m, IEN, k, j, i), qr(m, IDN, k, j, i)*tfloor_gm1);
+      });
   }
 }
 

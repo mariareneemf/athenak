@@ -35,6 +35,15 @@ struct EOS_Data {
   int debug_eos_statistic; //xiaoshan: flag to check if want to account for EOS flags using scalar
   int debug_fill_zero; //xiaoshan: flag to fill zero to passaive scalars
 
+  // true if tfloor set above its default: then rho*tfloor replaces pfloor (SR/GR c2p, recon)
+  bool use_tfloor = false;
+
+  // pressure floor for a given density: rho*tfloor if tfloor set, else pfloor
+  KOKKOS_INLINE_FUNCTION
+  Real PressureFloor(const Real dens) const {
+    return use_tfloor ? dens*tfloor : pfloor;
+  }
+
   // IDEAL GAS PRESSURE: converts primitive variable (either internal energy density e
   // or temperature e/d) into pressure.
   KOKKOS_INLINE_FUNCTION
