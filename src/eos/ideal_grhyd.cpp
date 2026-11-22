@@ -31,6 +31,16 @@ IdealGRHydro::IdealGRHydro(MeshBlockPack *pp, ParameterInput *pin) :
 }
 
 //----------------------------------------------------------------------------------------
+// EOS debug counters: true only the first time counter n is hit in a cell this stage
+KOKKOS_INLINE_FUNCTION
+bool FirstInStage(const DvceArray5D<int> &stamp, const int n, const int sid,
+                  const int m, const int k, const int j, const int i) {
+  if (stamp(n,m,k,j,i) == sid) return false;
+  stamp(n,m,k,j,i) = sid;
+  return true;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void ConsToPrim()
 //! \brief Converts conserved into primitive variables for an ideal gas in GR hydro.
 //! Operates over range of cells given in argument list.
@@ -51,7 +61,8 @@ void IdealGRHydro::ConsToPrim(DvceArray5D<Real> &cons, DvceArray5D<Real> &prim,
   // debug flags
   int debug_eos_statistic = eos_data.debug_eos_statistic;
   int debug_fill_zero = eos_data.debug_fill_zero;
-  constexpr int NDEBUG_EOS = 6;
+  // constexpr int NDEBUG_EOS = 6;
+  // NDEBUG_EOS now in eos.hpp, shared with hydro update/fluxes
   
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int &is = indcs.is, &js = indcs.js, &ks = indcs.ks;
@@ -60,6 +71,8 @@ void IdealGRHydro::ConsToPrim(DvceArray5D<Real> &cons, DvceArray5D<Real> &prim,
   int &nscal = pmy_pack->phydro->nscalars;
   int &nmb = pmy_pack->nmb_thispack;
   auto &fofc_ = pmy_pack->phydro->fofc;
+  // number of leading scalars that are debug counters (0 if debugging off)
+  int ndbg = NumDebugScalars(eos_data, nscal);
 
   // Temporary per-cell flag array for debug scalar tracking (only allocated when needed).
   // Stores 5 booleans (dfloor, efloor, vceiling, c2p_failure, excised) per cell so the
@@ -71,7 +84,19 @@ void IdealGRHydro::ConsToPrim(DvceArray5D<Real> &cons, DvceArray5D<Real> &prim,
     // cons is indexed (m, var, k, j, i), so extents 0,2,3,4 give nmb,n3,n2,n1.
     c2p_flags = DvceArray5D<bool>("c2p_flags", 5,
                   cons.extent(0), cons.extent(2), cons.extent(3), cons.extent(4));
+    // stage stamps persist across calls; (re)allocate only if mesh size changed (AMR)
+    if (debug_stamp.extent(0) != static_cast<size_t>(NDEBUG_EOS) ||
+        debug_stamp.extent(1) != cons.extent(0) ||
+        debug_stamp.extent(2) != cons.extent(2) ||
+        debug_stamp.extent(3) != cons.extent(3) ||
+        debug_stamp.extent(4) != cons.extent(4)) {
+      Kokkos::realloc(debug_stamp, NDEBUG_EOS, cons.extent(0), cons.extent(2),
+                      cons.extent(3), cons.extent(4));
+      Kokkos::deep_copy(debug_stamp, -1);
+    }
   }
+  auto stamp_ = debug_stamp;
+  int sid = debug_stage_id;
   auto eos = eos_data;
   Real gm1 = eos_data.gamma - 1.0;
 
@@ -218,7 +243,15 @@ void IdealGRHydro::ConsToPrim(DvceArray5D<Real> &cons, DvceArray5D<Real> &prim,
       }
 
       // Convert scalars (normal path, always executed)
-      for (int n=nhyd; n<(nhyd+nscal); ++n) {
+      // for (int n=nhyd; n<(nhyd+nscal); ++n) {
+      //   prim(m,n,k,j,i) = cons(m,n,k,j,i)/u.d;
+      // }
+      // debug counters stored unweighted: unaffected by D changes, floors or failures
+      for (int n=nhyd; n<(nhyd+ndbg); ++n) {
+        prim(m,n,k,j,i) = cons(m,n,k,j,i);
+      }
+      // remaining (advected) scalars: usual cons/D
+      for (int n=nhyd+ndbg; n<(nhyd+nscal); ++n) {
         prim(m,n,k,j,i) = cons(m,n,k,j,i)/u.d;
       }
       // Store per-cell floor flags for debug scalar accumulation in a separate par_for.
@@ -245,50 +278,71 @@ void IdealGRHydro::ConsToPrim(DvceArray5D<Real> &cons, DvceArray5D<Real> &prim,
   if (debug_eos_statistic==1 && !only_testfloors) {
     par_for("c2p_debug_scalars",DevExeSpace(),0,nmb-1,kl,ku,jl,ju,il,iu,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      Real den = cons(m,IDN,k,j,i);
+      // Real den = cons(m,IDN,k,j,i);
+      // counters are unweighted, density no longer needed
 
       // Zero all debug scalar cons entries
-      for (int n=nhyd; n<(nhyd+NDEBUG_EOS); ++n) {
-        cons(m,n,k,j,i) = 0.0;
-      }
+      // for (int n=nhyd; n<(nhyd+NDEBUG_EOS); ++n) {
+      //   cons(m,n,k,j,i) = 0.0;
+      // }
+      // no zeroing: cons must keep the count in cells not flagged this call
 
       // Scalar 0: total c2p call counter (always increments)
-      prim(m,nhyd+0,k,j,i) += 1.0;
-      cons(m,nhyd+0,k,j,i) = prim(m,nhyd+0,k,j,i) * den;
+      // prim(m,nhyd+0,k,j,i) += 1.0;
+      if (FirstInStage(stamp_, 0, sid, m, k, j, i)) {  // at most once per stage
+        prim(m,nhyd+0,k,j,i) += 1.0;
+      }
+      // cons(m,nhyd+0,k,j,i) = prim(m,nhyd+0,k,j,i) * den;
+      cons(m,nhyd+0,k,j,i) = prim(m,nhyd+0,k,j,i);  // unweighted counter
 
       // Scalar 1: density floor
-      if (c2p_flags(0,m,k,j,i)) {
+      // if (c2p_flags(0,m,k,j,i)) {
+      if (c2p_flags(0,m,k,j,i) &&
+          FirstInStage(stamp_, 1, sid, m, k, j, i)) {  // at most once per stage
         if (debug_fill_zero==1) { prim(m,nhyd+1,k,j,i) = 0.0; }
         else                    { prim(m,nhyd+1,k,j,i) += 1.0; }
-        cons(m,nhyd+1,k,j,i) = prim(m,nhyd+1,k,j,i) * den;
+        // cons(m,nhyd+1,k,j,i) = prim(m,nhyd+1,k,j,i) * den;
+        cons(m,nhyd+1,k,j,i) = prim(m,nhyd+1,k,j,i);  // unweighted counter
       }
 
       // Scalar 2: energy floor
-      if (c2p_flags(1,m,k,j,i)) {
+      // if (c2p_flags(1,m,k,j,i)) {
+      if (c2p_flags(1,m,k,j,i) &&
+          FirstInStage(stamp_, 2, sid, m, k, j, i)) {  // at most once per stage
         if (debug_fill_zero==1) { prim(m,nhyd+2,k,j,i) = 0.0; }
         else                    { prim(m,nhyd+2,k,j,i) += 1.0; }
-        cons(m,nhyd+2,k,j,i) = prim(m,nhyd+2,k,j,i) * den;
+        // cons(m,nhyd+2,k,j,i) = prim(m,nhyd+2,k,j,i) * den;
+        cons(m,nhyd+2,k,j,i) = prim(m,nhyd+2,k,j,i);  // unweighted counter
       }
 
       // Scalar 3: velocity ceiling
-      if (c2p_flags(2,m,k,j,i)) {
+      // if (c2p_flags(2,m,k,j,i)) {
+      if (c2p_flags(2,m,k,j,i) &&
+          FirstInStage(stamp_, 3, sid, m, k, j, i)) {  // at most once per stage
         if (debug_fill_zero==1) { prim(m,nhyd+3,k,j,i) = 0.0; }
         else                    { prim(m,nhyd+3,k,j,i) += 1.0; }
-        cons(m,nhyd+3,k,j,i) = prim(m,nhyd+3,k,j,i) * den;
+        // cons(m,nhyd+3,k,j,i) = prim(m,nhyd+3,k,j,i) * den;
+        cons(m,nhyd+3,k,j,i) = prim(m,nhyd+3,k,j,i);  // unweighted counter
       }
 
       // Scalar 4: c2p failure
-      if (c2p_flags(3,m,k,j,i)) {
+      // if (c2p_flags(3,m,k,j,i)) {
+      if (c2p_flags(3,m,k,j,i) &&
+          FirstInStage(stamp_, 4, sid, m, k, j, i)) {  // at most once per stage
         if (debug_fill_zero==1) { prim(m,nhyd+4,k,j,i) = 0.0; }
         else                    { prim(m,nhyd+4,k,j,i) += 1.0; }
-        cons(m,nhyd+4,k,j,i) = prim(m,nhyd+4,k,j,i) * den;
+        // cons(m,nhyd+4,k,j,i) = prim(m,nhyd+4,k,j,i) * den;
+        cons(m,nhyd+4,k,j,i) = prim(m,nhyd+4,k,j,i);  // unweighted counter
       }
 
       // Scalar 5: excised cell
-      if (c2p_flags(4,m,k,j,i)) {
+      // if (c2p_flags(4,m,k,j,i)) {
+      if (c2p_flags(4,m,k,j,i) &&
+          FirstInStage(stamp_, 5, sid, m, k, j, i)) {  // at most once per stage
         if (debug_fill_zero==1) { prim(m,nhyd+5,k,j,i) = 0.0; }
         else                    { prim(m,nhyd+5,k,j,i) += 1.0; }
-        cons(m,nhyd+5,k,j,i) = prim(m,nhyd+5,k,j,i) * den;
+        // cons(m,nhyd+5,k,j,i) = prim(m,nhyd+5,k,j,i) * den;
+        cons(m,nhyd+5,k,j,i) = prim(m,nhyd+5,k,j,i);  // unweighted counter
       }
     });
   }
@@ -327,6 +381,8 @@ void IdealGRHydro::PrimToCons(const DvceArray5D<Real> &prim, DvceArray5D<Real> &
   int &nscal = pmy_pack->phydro->nscalars;
   int &nmb = pmy_pack->nmb_thispack;
   Real &gamma = eos_data.gamma;
+  // number of leading scalars that are debug counters (0 if debugging off)
+  int ndbg = NumDebugScalars(eos_data, nscal);
 
   par_for("grhyd_p2c", DevExeSpace(), 0, (nmb-1), kl, ku, jl, ju, il, iu,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -366,7 +422,15 @@ void IdealGRHydro::PrimToCons(const DvceArray5D<Real> &prim, DvceArray5D<Real> &
     cons(m,IEN,k,j,i) = u.e;
 
     // convert scalars (if any)
-    for (int n=nhyd; n<(nhyd+nscal); ++n) {
+    // for (int n=nhyd; n<(nhyd+nscal); ++n) {
+    //   cons(m,n,k,j,i) = u.d*prim(m,n,k,j,i);
+    // }
+    // debug counters stored unweighted
+    for (int n=nhyd; n<(nhyd+ndbg); ++n) {
+      cons(m,n,k,j,i) = prim(m,n,k,j,i);
+    }
+    // remaining (advected) scalars: usual D*s
+    for (int n=nhyd+ndbg; n<(nhyd+nscal); ++n) {
       cons(m,n,k,j,i) = u.d*prim(m,n,k,j,i);
     }
   });

@@ -85,6 +85,8 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   int nvars = nhydro + nscalars;
   int nmb1 = pmy_pack->nmb_thispack - 1;
   const auto recon_method_ = recon_method;
+  // EOS debug counter scalars get zero flux
+  int ndbg_ = NumDebugScalars(peos->eos_data, nscalars);
 
   // Face-normal and transverse flux ranges.  With FOFC the first-order flux correction
   // reads the main fluxes one cell beyond the active domain in every dimension, so the
@@ -137,6 +139,8 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
         0, nmb1, ks, ke, js, je, is, ie+1,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
           for (int n = nhyd_; n < nvars; ++n) {
+            // debug counters are not advected
+            if (n < nhyd_ + ndbg_) { flx1(m, n, k, j, i) = 0.0; continue; }
             if (flx1(m, IDN, k, j, i) >= 0.0) {
               flx1(m, n, k, j, i) = flx1(m, IDN, k, j, i) * wl_(m, n, k, j, i);
             } else {
@@ -176,6 +180,8 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
         0, nmb1, ks, ke, js, je+1, is, ie,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
           for (int n = nhyd_; n < nvars; ++n) {
+            // debug counters are not advected
+            if (n < nhyd_ + ndbg_) { flx2(m, n, k, j, i) = 0.0; continue; }
             if (flx2(m, IDN, k, j, i) >= 0.0) {
               flx2(m, n, k, j, i) = flx2(m, IDN, k, j, i) * wl_(m, n, k, j, i);
             } else {
@@ -215,6 +221,8 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
         0, nmb1, ks, ke+1, js, je, is, ie,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
           for (int n = nhyd_; n < nvars; ++n) {
+            // debug counters are not advected
+            if (n < nhyd_ + ndbg_) { flx3(m, n, k, j, i) = 0.0; continue; }
             if (flx3(m, IDN, k, j, i) >= 0.0) {
               flx3(m, n, k, j, i) = flx3(m, IDN, k, j, i) * wl_(m, n, k, j, i);
             } else {

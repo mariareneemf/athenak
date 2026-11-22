@@ -34,6 +34,11 @@ TaskStatus Hydro::RKUpdate(Driver *pdriver, int stage) {
   Real beta_dt = (pdriver->beta[stage-1])*(pmy_pack->pmesh->dt);
   int nmb1 = pmy_pack->nmb_thispack - 1;
   int nvar = nhydro + nscalars;
+  // new RK stage: EOS debug counters may add once more per cell
+  peos->debug_stage_id++;
+  int nhyd_ = nhydro;
+  // EOS debug counter scalars are excluded from the RK update
+  int ndbg_ = NumDebugScalars(peos->eos_data, nscalars);
   auto u0_ = u0;
   auto u1_ = u1;
   auto flx1 = uflx.x1f;
@@ -49,6 +54,8 @@ TaskStatus Hydro::RKUpdate(Driver *pdriver, int stage) {
 
   par_for_outer("h_update",DevExeSpace(),scr_size,scr_level,0,nmb1,0,nvar-1,ks,ke,js,je,
   KOKKOS_LAMBDA(TeamMember_t member, const int m, const int n, const int k, const int j) {
+    // skip debug counters: only changed in c2p (whole team shares n, so safe)
+    if (n >= nhyd_ && n < nhyd_ + ndbg_) return;
     ScrArray1D<Real> divf(member.team_scratch(scr_level), ncells1);
 
     // compute dF1/dx1

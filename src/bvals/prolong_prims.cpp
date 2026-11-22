@@ -52,6 +52,8 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
   auto &eos = pmy_pack->phydro->peos->eos_data;
   int &nhyd  = pmy_pack->phydro->nhydro;
   int &nscal = pmy_pack->phydro->nscalars;
+  // number of leading scalars that are debug counters (0 if debugging off)
+  int ndbg = NumDebugScalars(eos, nscal);
 
   // Outer loop over (# of MeshBlocks)*(# of buffers)
   Kokkos::TeamPolicy<> policy(DevExeSpace(), (nmb*nnghbr), Kokkos::AUTO);
@@ -167,7 +169,19 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
         prim(m,IVZ,k,j,i) = w.vz;
         prim(m,IEN,k,j,i) = w.e;
         // convert scalars (if any)
-        for (int n=nhyd; n<(nhyd+nscal); ++n) {
+        // for (int n=nhyd; n<(nhyd+nscal); ++n) {
+        //   // apply scalar floor
+        //   if (cons(m,n,k,j,i) < 0.0) {
+        //     cons(m,n,k,j,i) = 0.0;
+        //   }
+        //   prim(m,n,k,j,i) = cons(m,n,k,j,i)/u.d;
+        // }
+        // debug counters: unweighted and never floored
+        for (int n=nhyd; n<(nhyd+ndbg); ++n) {
+          prim(m,n,k,j,i) = cons(m,n,k,j,i);
+        }
+        // remaining (advected) scalars: original floor + cons/D
+        for (int n=nhyd+ndbg; n<(nhyd+nscal); ++n) {
           // apply scalar floor
           if (cons(m,n,k,j,i) < 0.0) {
             cons(m,n,k,j,i) = 0.0;
@@ -207,6 +221,8 @@ void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
   Real &gamma = pmy_pack->phydro->peos->eos_data.gamma;
   int &nhyd  = pmy_pack->phydro->nhydro;
   int &nscal = pmy_pack->phydro->nscalars;
+  // number of leading scalars that are debug counters (0 if debugging off)
+  int ndbg = NumDebugScalars(pmy_pack->phydro->peos->eos_data, nscal);
 
   // Outer loop over (# of MeshBlocks)*(# of buffers)
   Kokkos::TeamPolicy<> policy(DevExeSpace(), (nmb*nnghbr), Kokkos::AUTO);
@@ -283,7 +299,15 @@ void MeshBoundaryValuesCC::PrimToConsFineBndry(const DvceArray5D<Real> &prim,
         cons(m,IEN,k,j,i) = u.e;
 
         // convert scalars (if any)
-        for (int n=nhyd; n<(nhyd+nscal); ++n) {
+        // for (int n=nhyd; n<(nhyd+nscal); ++n) {
+        //   cons(m,n,k,j,i) = u.d*prim(m,n,k,j,i);
+        // }
+        // debug counters stored unweighted
+        for (int n=nhyd; n<(nhyd+ndbg); ++n) {
+          cons(m,n,k,j,i) = prim(m,n,k,j,i);
+        }
+        // remaining (advected) scalars: usual D*s
+        for (int n=nhyd+ndbg; n<(nhyd+nscal); ++n) {
           cons(m,n,k,j,i) = u.d*prim(m,n,k,j,i);
         }
       });

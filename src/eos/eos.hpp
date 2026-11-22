@@ -194,6 +194,15 @@ struct EOS_Data {
   }
 };
 
+// number of leading passive scalars used as EOS debug counters (see ideal_grhyd.cpp)
+constexpr int NDEBUG_EOS = 6;
+
+// debug counter scalars in use: 0 when debugging off, never more than nscal
+inline int NumDebugScalars(const EOS_Data &eos, const int nscal) {
+  if (eos.debug_eos_statistic != 1) return 0;
+  return (nscal < NDEBUG_EOS) ? nscal : NDEBUG_EOS;
+}
+
 //----------------------------------------------------------------------------------------
 //! \class EquationOfState
 //! \brief Abstract base class for EOS.
@@ -205,6 +214,10 @@ class EquationOfState {
 
   MeshBlockPack* pmy_pack;
   EOS_Data eos_data;
+
+  // EOS debug counters: each counter adds at most once per cell per RK stage
+  int debug_stage_id = 0;           // bumped once per stage in Hydro::RKUpdate
+  DvceArray5D<int> debug_stamp;     // (NDEBUG_EOS,m,k,j,i): last stage each counter added
 
   // virtual functions to convert cons to prim in either Hydro or MHD (depending on
   // arguments), overwritten in derived eos classes

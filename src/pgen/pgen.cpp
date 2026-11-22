@@ -322,6 +322,27 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     }
     Kokkos::deep_copy(Kokkos::subview(phydro->u0, std::make_pair(0,nmb), Kokkos::ALL,
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
+    // old restarts stored EOS debug counters as D*count: convert once to plain counts
+    if (pin->GetOrAddInteger("hydro", "debug_convert_restart", 0) == 1) {
+      int nhyd_ = phydro->nhydro;
+      int ndbg_ = NumDebugScalars(phydro->peos->eos_data, phydro->nscalars);
+      auto u0_ = phydro->u0;
+      par_for("debug_convert_restart", DevExeSpace(), 0, nmb-1, 0, nout3-1, 0, nout2-1,
+              0, nout1-1, KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        Real d = u0_(m,IDN,k,j,i);
+        if (d > 0.0) {  // guard against empty ghost cells
+          for (int n=nhyd_; n<(nhyd_+ndbg_); ++n) {
+            u0_(m,n,k,j,i) /= d;
+          }
+        }
+      });
+      // reset so later restart files (which store the input params) are not converted again
+      pin->SetInteger("hydro", "debug_convert_restart", 0);
+      if (global_variable::my_rank == 0) {
+        std::cout << "debug_convert_restart: converted " << ndbg_
+                  << " EOS debug scalars from D*count to count" << std::endl;
+      }
+    }
     offset_myrank += nout1*nout2*nout3*nhydro*sizeof(Real); // hydro u0
     myoffset = offset_myrank;
   }
