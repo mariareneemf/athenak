@@ -23,7 +23,9 @@ EquationOfState::EquationOfState(std::string bk, MeshBlockPack* pp, ParameterInp
   eos_data.pfloor = pin->GetOrAddReal(bk,"pfloor",(FLT_MIN));
   eos_data.tfloor = pin->GetOrAddReal(bk,"tfloor",(FLT_MIN));
   // tfloor only counts as set if above its default value
-  eos_data.use_tfloor = (eos_data.tfloor > (FLT_MIN));
+  // eos_data.use_tfloor = (eos_data.tfloor > (FLT_MIN));
+  // 10x margin: default read back from a restart file may not equal FLT_MIN exactly
+  eos_data.use_tfloor = (eos_data.tfloor > 10.0*(FLT_MIN));
   eos_data.sfloor = pin->GetOrAddReal(bk,"sfloor",(FLT_MIN));
   eos_data.debug_eos_statistic = pin->GetOrAddInteger(bk,"debug_eos_statistic",0);
   eos_data.debug_fill_zero = pin->GetOrAddInteger(bk,"debug_fill_zero",0);
