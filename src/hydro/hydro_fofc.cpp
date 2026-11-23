@@ -91,6 +91,9 @@ void Hydro::FOFC(Driver *pdriver, int stage) {
   auto &use_excise = pmy_pack->pcoord->coord_data.bh_excise;
   auto &excision_flux_ = pmy_pack->pcoord->excision_flux;
   auto &w0_ = w0;
+  // range of advected passive scalars [nsl_, nsu_) whose fluxes are rebuilt below
+  int nsl_ = nhydro + NumDebugScalars(peos->eos_data, nscalars);
+  int nsu_ = nhydro + nscalars;
 
   // Index bounds
   int il = is-1, iu = ie+1, jl = js, ju = je, kl = ks, ku = ke;
@@ -157,6 +160,12 @@ void Hydro::FOFC(Driver *pdriver, int stage) {
       flx1(m,IM2,k,j,i) = flux.my;
       flx1(m,IM3,k,j,i) = flux.mz;
       if (eos.is_ideal) {flx1(m,IEN,k,j,i) = flux.e;}
+      // passive scalar fluxes: upwind w.r.t. the 1st-order mass flux, so they stay
+      // consistent with flux.d (debug counter scalars keep their zero flux)
+      for (int n=nsl_; n<nsu_; ++n) {
+        flx1(m,n,k,j,i) = (flux.d >= 0.0) ? flux.d*w0_(m,n,k,j,i-1)
+                                          : flux.d*w0_(m,n,k,j,i);
+      }
 
       // replace x1-flux at i+1
       // load right state (left state just wi from above)
@@ -193,6 +202,12 @@ void Hydro::FOFC(Driver *pdriver, int stage) {
       flx1(m,IM2,k,j,i+1) = flux.my;
       flx1(m,IM3,k,j,i+1) = flux.mz;
       if (eos.is_ideal) {flx1(m,IEN,k,j,i+1) = flux.e;}
+      // passive scalar fluxes: upwind w.r.t. the 1st-order mass flux, so they stay
+      // consistent with flux.d (debug counter scalars keep their zero flux)
+      for (int n=nsl_; n<nsu_; ++n) {
+        flx1(m,n,k,j,i+1) = (flux.d >= 0.0) ? flux.d*w0_(m,n,k,j,i)
+                                            : flux.d*w0_(m,n,k,j,i+1);
+      }
 
       if (multi_d) {
         // replace x2-flux at j
@@ -238,6 +253,12 @@ void Hydro::FOFC(Driver *pdriver, int stage) {
         flx2(m,IM3,k,j,i) = flux.my;
         flx2(m,IM1,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx2(m,IEN,k,j,i) = flux.e;}
+        // passive scalar fluxes: upwind w.r.t. the 1st-order mass flux, so they stay
+        // consistent with flux.d (debug counter scalars keep their zero flux)
+        for (int n=nsl_; n<nsu_; ++n) {
+          flx2(m,n,k,j,i) = (flux.d >= 0.0) ? flux.d*w0_(m,n,k,j-1,i)
+                                            : flux.d*w0_(m,n,k,j,i);
+        }
 
         // replace x2-flux at j+1
         // load left state, permutting components of vectors (just wj from above)
@@ -275,6 +296,12 @@ void Hydro::FOFC(Driver *pdriver, int stage) {
         flx2(m,IM3,k,j+1,i) = flux.my;
         flx2(m,IM1,k,j+1,i) = flux.mz;
         if (eos.is_ideal) {flx2(m,IEN,k,j+1,i) = flux.e;}
+        // passive scalar fluxes: upwind w.r.t. the 1st-order mass flux, so they stay
+        // consistent with flux.d (debug counter scalars keep their zero flux)
+        for (int n=nsl_; n<nsu_; ++n) {
+          flx2(m,n,k,j+1,i) = (flux.d >= 0.0) ? flux.d*w0_(m,n,k,j,i)
+                                              : flux.d*w0_(m,n,k,j+1,i);
+        }
       }
 
       if (three_d) {
@@ -321,6 +348,12 @@ void Hydro::FOFC(Driver *pdriver, int stage) {
         flx3(m,IM1,k,j,i) = flux.my;
         flx3(m,IM2,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx3(m,IEN,k,j,i) = flux.e;}
+        // passive scalar fluxes: upwind w.r.t. the 1st-order mass flux, so they stay
+        // consistent with flux.d (debug counter scalars keep their zero flux)
+        for (int n=nsl_; n<nsu_; ++n) {
+          flx3(m,n,k,j,i) = (flux.d >= 0.0) ? flux.d*w0_(m,n,k-1,j,i)
+                                            : flux.d*w0_(m,n,k,j,i);
+        }
 
         // replace x3-flux at k+1
         // load left state, permutting components of vectors (just wk from above)
@@ -358,6 +391,12 @@ void Hydro::FOFC(Driver *pdriver, int stage) {
         flx3(m,IM1,k+1,j,i) = flux.my;
         flx3(m,IM2,k+1,j,i) = flux.mz;
         if (eos.is_ideal) {flx3(m,IEN,k+1,j,i) = flux.e;}
+        // passive scalar fluxes: upwind w.r.t. the 1st-order mass flux, so they stay
+        // consistent with flux.d (debug counter scalars keep their zero flux)
+        for (int n=nsl_; n<nsu_; ++n) {
+          flx3(m,n,k+1,j,i) = (flux.d >= 0.0) ? flux.d*w0_(m,n,k,j,i)
+                                              : flux.d*w0_(m,n,k+1,j,i);
+        }
       }
 
       // reset FOFC flag (do not reset excision flag)
