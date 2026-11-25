@@ -95,8 +95,11 @@ Real EquationC22(Real z, Real &u_d, Real q, Real r, EOS_Data eos) {
   Real const wd = u_d/w;                  // (C15)
   Real eps = w*q - z*r + (z*z)/(1.0 + w); // (C16)
   // Real epsmin = fmax(eos.pfloor/(wd*gm1), eos.sfloor*pow(wd, gm1)/gm1);
-  // pressure floor at current density guess (rho*tfloor if tfloor set)
-  Real epsmin = fmax(eos.PressureFloor(wd)/(wd*gm1), eos.sfloor*pow(wd, gm1)/gm1);
+  // pressure floor at current density guess (rho*tfloor_trigger if tfloor set).
+  // Uses the trigger, not the reset value: unfloored gas between tfloor_trigger and
+  // tfloor must keep its own enthalpy in the root find.
+  Real epsmin = fmax(eos.PressureFloorTrigger(wd)/(wd*gm1),
+                     eos.sfloor*pow(wd, gm1)/gm1);
   eps = fmax(eps, epsmin);                // (C18)
   Real const h = 1.0 + eos.gamma*eps;     // (C1) & (C21)
   return (z - r/h); // (C22)
@@ -129,10 +132,12 @@ void SingleC2P_IdealSRHyd(HydCons1D &u, const EOS_Data &eos, const Real s2, HydP
   //   u.e = eos.pfloor/gm1;
   //   efloor_used = true;
   // }
-  // before inversion only u.d is known, so rho*tfloor uses u.d (if tfloor set)
-  Real pfloor_temp = eos.PressureFloor(u.d);
-  if (u.e < pfloor_temp/gm1) {
-    u.e = pfloor_temp/gm1;
+  // before inversion only u.d is known, so rho*tfloor uses u.d (if tfloor set).
+  // u.e here is tau = E_n - D_n (kinetic + internal in the normal frame), so this
+  // only fires for gas with almost no kinetic and internal energy.  Trigger on
+  // tfloor_trigger, reset to tfloor.
+  if (u.e < eos.PressureFloorTrigger(u.d)/gm1) {
+    u.e = eos.PressureFloor(u.d)/gm1;
     efloor_used = true;
   }
 
@@ -213,9 +218,13 @@ void SingleC2P_IdealSRHyd(HydCons1D &u, const EOS_Data &eos, const Real s2, HydP
   Real eps = lor*q - z*r + (z*z)/(1.0 + lor);   // (C16)
   // Real epsmin = fmax(eos.pfloor/(dens*gm1), eos.sfloor*pow(dens, gm1)/gm1);
   // pressure floor at new primitive density (rho*tfloor if tfloor set)
-  Real epsmin = fmax(eos.PressureFloor(dens)/(dens*gm1), eos.sfloor*pow(dens, gm1)/gm1);
-  if (eps <= epsmin) {
-    eps = epsmin;
+  // Floor applied only below the trigger (rho*tfloor_trigger if tfloor set) and the
+  // cell is then reset to rho*tfloor.  With tfloor_trigger == tfloor (default) this
+  // is the plain minimum-temperature floor.  The entropy floor keeps its usual form.
+  Real epsmin_trig = fmax(eos.PressureFloorTrigger(dens)/(dens*gm1),
+                          eos.sfloor*pow(dens, gm1)/gm1);
+  if (eps <= epsmin_trig) {
+    eps = fmax(eos.PressureFloor(dens)/(dens*gm1), eos.sfloor*pow(dens, gm1)/gm1);
     efloor_used = true;
   }
 

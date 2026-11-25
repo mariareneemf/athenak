@@ -29,6 +29,12 @@ struct EOS_Data {
   Real iso_cs;       // isothermal sound speed
   bool is_ideal;     // flag to denote ideal gas EOS
   Real dfloor, pfloor, tfloor, sfloor;  // density, pressure, temperature, entropy floors
+  // temperature below which the tfloor reset is applied (code units, P/rho).  Defaults
+  // to tfloor, i.e. tfloor acts as a plain minimum temperature.  With
+  // tfloor_trigger < tfloor, tfloor becomes a RESET value: only cells whose recovered
+  // temperature drops below tfloor_trigger are set to tfloor; gas between the two is
+  // left untouched.  Only used when use_tfloor is true.
+  Real tfloor_trigger;
   Real gamma_max;    // ceiling on Lorentz factor in SR/GR
   Real sigma_max;    // ceiling on magnetization in MHD
 
@@ -38,10 +44,18 @@ struct EOS_Data {
   // true if tfloor set above its default: then rho*tfloor replaces pfloor (SR/GR c2p, recon)
   bool use_tfloor = false;
 
-  // pressure floor for a given density: rho*tfloor if tfloor set, else pfloor
+  // pressure floor for a given density: rho*tfloor if tfloor set, else pfloor.
+  // This is the value a floored cell is SET to (the reset value).
   KOKKOS_INLINE_FUNCTION
   Real PressureFloor(const Real dens) const {
     return use_tfloor ? dens*tfloor : pfloor;
+  }
+
+  // pressure below which the floor is APPLIED: rho*tfloor_trigger if tfloor set, else
+  // pfloor.  Equal to PressureFloor() unless tfloor_trigger < tfloor.
+  KOKKOS_INLINE_FUNCTION
+  Real PressureFloorTrigger(const Real dens) const {
+    return use_tfloor ? dens*tfloor_trigger : pfloor;
   }
 
   // IDEAL GAS PRESSURE: converts primitive variable (either internal energy density e

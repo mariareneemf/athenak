@@ -194,7 +194,9 @@ inline void ReconDispatch(ReconstructionMethod recon, const char *name, int nmb1
     constexpr int di = (ivx == IVX) ? 1 : 0;
     constexpr int dj = (ivx == IVY) ? 1 : 0;
     constexpr int dk = (ivx == IVZ) ? 1 : 0;
-    const Real tfloor_gm1 = eos.tfloor/(eos.gamma - 1.0);
+    // face states: minimum at the trigger temperature (reset is applied only in the
+    // c2p, where a floored cell is recorded); equals tfloor by default
+    const Real tfloor_gm1 = eos.tfloor_trigger/(eos.gamma - 1.0);
     par_for("recon_tfloor", DevExeSpace(), 0, nmb1, kl, ku, jl, ju, il, iu,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         // same face locations as written in ReconCellT

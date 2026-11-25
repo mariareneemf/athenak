@@ -7,6 +7,8 @@
 //! \brief implements constructor and some fns for EquationOfState abstract base class
 
 #include <float.h>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 
 #include "athena.hpp"
@@ -26,6 +28,17 @@ EquationOfState::EquationOfState(std::string bk, MeshBlockPack* pp, ParameterInp
   // eos_data.use_tfloor = (eos_data.tfloor > (FLT_MIN));
   // 10x margin: default read back from a restart file may not equal FLT_MIN exactly
   eos_data.use_tfloor = (eos_data.tfloor > 10.0*(FLT_MIN));
+  // optional trigger temperature for the tfloor reset (code units, like tfloor).
+  // Default = tfloor, which reproduces tfloor acting as a plain minimum temperature.
+  eos_data.tfloor_trigger = pin->GetOrAddReal(bk,"tfloor_trigger",eos_data.tfloor);
+  if (eos_data.use_tfloor && eos_data.tfloor_trigger > eos_data.tfloor) {
+    // a reset value below the trigger would re-trigger the floor on every call
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "<" << bk << ">/tfloor_trigger = "
+              << eos_data.tfloor_trigger << " must be <= tfloor = "
+              << eos_data.tfloor << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   eos_data.sfloor = pin->GetOrAddReal(bk,"sfloor",(FLT_MIN));
   eos_data.debug_eos_statistic = pin->GetOrAddInteger(bk,"debug_eos_statistic",0);
   eos_data.debug_fill_zero = pin->GetOrAddInteger(bk,"debug_fill_zero",0);
